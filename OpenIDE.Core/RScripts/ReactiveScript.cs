@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using CoreExtensions;
+using OpenIDE.Core.Logging;
 
 namespace OpenIDE.Core.RScripts
 {
@@ -26,9 +27,10 @@ namespace OpenIDE.Core.RScripts
 
 		public bool ReactsTo(string @event)
 		{
-			foreach (var reactEvent in _events)
+			foreach (var reactEvent in _events) {
 				if (wildcardmatch(@event, reactEvent))
 					return true;
+            }
 			return false;
 		}
 
@@ -38,7 +40,6 @@ namespace OpenIDE.Core.RScripts
 				Environment.OSVersion.Platform != PlatformID.MacOSX)
 			{
 				message = message
-						  	.Replace("\"", "^\"")
 							.Replace(" ", "^ ")
 							.Replace("|", "^|")
 							.Replace("%", "^&")
@@ -46,28 +47,55 @@ namespace OpenIDE.Core.RScripts
 							.Replace("<", "^<")
 							.Replace(">", "^>");
 			}
-			message = "\"" + message + "\"";
+            message = "\"" + message + "\"";
 			var process = new Process();
+            Logger.Write("Running: " + _file + " " + message);
 			process.Run(_file, message, false, _keyPath);
 		}
 
 		private void getEvents()
 		{
 			_events.Clear();
-			_events.AddRange(
-				new Process()
-					.Query(_file, "reactive-script-reacts-to", false, _keyPath)
-					.Where(x => x.Length > 0)
-					.Select(x => x.Trim(new[] {'\"'})));
+			new Process()
+				.Query(
+					_file,
+					"reactive-script-reacts-to",
+					false,
+					_keyPath,
+					(error, m) => {
+						if (error) {
+							Logger.Write(
+								"Failed running reactive script with reactive-script-reacts-to: " +
+								_file);
+							Logger.Write(m);
+							return;
+						}
+						if (m.Length > 0)
+							_events.Add(m.Trim(new[] {'\"'}));
+					});
 		}
 		
 		private bool wildcardmatch(string str, string pattern)
 		{
-			var rgx = new Regex(
+            return new RScriptMatcher(pattern).Match(str);
+		}
+	}
+
+    public class RScriptMatcher
+    {
+        private Regex _matcher;
+
+        public RScriptMatcher(string pattern)
+        {
+             _matcher = new Regex(
 				"^" + Regex.Escape(pattern)
 					.Replace( "\\*", ".*" )
 					.Replace( "\\?", "." ) + "$");
-			return rgx.IsMatch(str);
-		}
-	}
+        }
+
+        public bool Match(string text)
+        {
+            return _matcher.IsMatch(text);
+        }
+    }
 }

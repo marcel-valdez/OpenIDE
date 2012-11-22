@@ -16,38 +16,64 @@ namespace CoreExtensions
         {
             prepareProcess(proc, command, arguments, visible, workingDir);
             proc.Start();
+			proc.WaitForExit();
         }
 
-        public static IEnumerable<string> Query(
+        public static void Query(
             this Process proc,
             string command,
             string arguments,
             bool visible,
-            string workingDir)
+            string workingDir,
+			Action<bool, string> onRecievedLine)
         {
             if (Environment.OSVersion.Platform != PlatformID.Unix &&
                 Environment.OSVersion.Platform != PlatformID.MacOSX)
             {
                 arguments = "/c " +
-                    "^\"" + command + "^\" " +
-                    arguments.Replace("\"", "^\"");
+                    "^\"" + batchEscape(command) + "^\" " +
+                    batchEscape(arguments);
                 command = "cmd.exe";
             }
-
+			
+			var exit = false;
             prepareProcess(proc, command, arguments, visible, workingDir);
             proc.StartInfo.UseShellExecute = false;
             proc.StartInfo.RedirectStandardOutput = true;
-
+            proc.StartInfo.RedirectStandardError = true;
+			proc.OutputDataReceived += (s, data) => {
+					if (data.Data == null)
+						exit = true;
+					else
+						onRecievedLine(false, data.Data);
+				};
+            proc.ErrorDataReceived += (s, data) => {
+                    if (data.Data == null)
+                        exit = true;
+                    else
+                        onRecievedLine(true, data.Data);
+                }; 
             if (proc.Start())
             {
-                while (true)
-                {
-                    var line = proc.StandardOutput.ReadLine();
-                    if (line == null)
-                        break;
-                    yield return line;
-                }
+				proc.BeginOutputReadLine();
+				while (!exit && isRunning(proc))
+					System.Threading.Thread.Sleep(10);
             }
+        }
+
+        private static string batchEscape(string text) {
+            foreach (var str in new[] { "^", " ", "&", "(", ")", "[", "]", "{", "}", "=", ";", "!", "'", "+", ",", "`", "~", "\"" })
+                text = text.Replace(str, "^" + str);
+            return text;
+        }
+
+        private static bool isRunning(Process proc) {
+            if (Environment.OSVersion.Platform != PlatformID.Unix &&
+                Environment.OSVersion.Platform != PlatformID.MacOSX)
+            {
+                return true;
+            }
+            return !proc.HasExited;
         }
 
         private static void prepareProcess(

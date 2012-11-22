@@ -1,6 +1,9 @@
 #!/usr/bin/env php
 <?php
 	if (count($argv) > 1) {
+		if ($argv[1] == "initialize")
+			write("initialized");
+
 		if ($argv[1] == "get-command-definitions")
 			handleDefinition();
 
@@ -67,7 +70,7 @@
                 $name = substr($line, $namePos, $paramPos - $namePos);
                 $signature = $name;
                 $column = $namePos + 2;
-                write("signature|" .
+                write("signature||" .
 					  $signature . "|" . 
 					  $name . 
 					  "|function||" . 

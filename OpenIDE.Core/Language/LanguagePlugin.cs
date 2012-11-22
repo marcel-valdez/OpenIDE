@@ -3,20 +3,22 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Diagnostics;
+using System.Threading;
 using System.Collections.Generic;
 using OpenIDE.Core.CommandBuilding;
+using OpenIDE.Core.Logging;
 
 namespace OpenIDE.Core.Language
 {
 	public class LanguagePlugin
 	{
 		private string _path;
-		private Func<string, string, IEnumerable<string>> _execute;
+		private Action<string, string, Action<bool, string>> _execute;
 		private Action<string> _dispatch;
 
 		public LanguagePlugin(
 			string path,
-			Func<string, string, IEnumerable<string>> execute,
+			Action<string, string, Action<bool, string>> execute,
 			Action<string> dispatch)
 		{
 			_path = path;
@@ -24,10 +26,40 @@ namespace OpenIDE.Core.Language
 			_dispatch = dispatch;
 		}
 
+		public string GetPluginDir()
+		{
+			return 
+				Path.Combine(Path.GetDirectoryName(_path),
+				Path.GetFileNameWithoutExtension(_path) + "-plugin");
+		}
+
 		public string GetLanguage()
 		{
 			return Path.GetFileNameWithoutExtension(_path);
 		}
+
+        public void Initialize(string keyPath)
+        {
+        	var initialized = false;
+        	new Thread(() => {
+        			run(
+        				string.Format("initialize \"{0}\"", keyPath),
+        				(line) => {
+        						if (line == "initialized")
+        							initialized = true;
+	        					_dispatch(line);
+	        				});
+        		}).Start();
+        	var timeout = DateTime.Now.AddSeconds(30);
+			while (!initialized && DateTime.Now < timeout) {
+				Thread.Sleep(10);
+			}
+        }
+
+        public void Shutdown()
+        {
+            run("shutdown");
+        }
 
 		public IEnumerable<BaseCommandHandlerParameter> GetUsages()
 		{
@@ -39,23 +71,23 @@ namespace OpenIDE.Core.Language
 			return ToSingleLine("crawl-file-types");
 		}
 
-		public IEnumerable<string> Crawl(IEnumerable<string> filesAndFolders)
+		public void Crawl(IEnumerable<string> filesAndFolders, Action<string> onLineReceived)
 		{
 			var file = Path.GetTempFileName();
 			File.WriteAllLines(file, filesAndFolders.ToArray());
-			foreach (var line in run(string.Format("crawl-source \"{0}\"", file)))
-				yield return line;
+			run(string.Format("crawl-source \"{0}\"", file), onLineReceived);
 			File.Delete(file);
 		}
 
 		public SignatureLocation SignatureFromPosition(FilePosition position)
 		{
 			try {
-				var lines = run(
-					string.Format(
+				var lines = new List<string>();
+				run(string.Format(
 						"signature-from-position \"{0}\"",
-						position.ToCommand())).ToArray();
-				if (lines.Length != 4)
+						position.ToCommand()),
+				    (m) => lines.Add(m));
+				if (lines.Count != 4)
 					return null;
 				return new SignatureLocation(
 					lines[0],
@@ -69,15 +101,24 @@ namespace OpenIDE.Core.Language
 
 		public string[] RetrieveMembersFromSignature(string signature)
 		{
-			return run("members-from-signature \"" + signature + "\"").ToArray();
+			var lines = new List<string>();
+			run("members-from-signature \"" + signature + "\"", (m) => lines.Add(m));
+			return lines.ToArray();
 		}
 
-		public void Run(string[] arguments)
+        public string[] Query(string[] arguments)
 		{
 			var sb = new StringBuilder();
 			arguments.ToList()
 				.ForEach(x => sb.Append(" \"" + x + "\""));
-			foreach (var line in run(sb.ToString()))
+			var lines = new List<string>();
+			run(sb.ToString(), (m) => lines.Add(m));
+			return lines.ToArray();
+		}
+
+		public void Run(string[] arguments)
+		{
+			foreach (var line in Query(arguments))
 				_dispatch(line);
 		}
 		
@@ -110,17 +151,29 @@ namespace OpenIDE.Core.Language
 		private string ToSingleLine(string arguments)
 		{
 			var sb = new StringBuilder();
-			run(arguments).ToList()
-				.ForEach(x => 
-					{
-						sb.Append(x);
-					});
+			run(arguments, (x) => sb.Append(x));
 			return sb.ToString();
 		}
 
-		private IEnumerable<string> run(string arguments)
+		private void run(string arguments)
 		{
-			return _execute(_path, arguments);
+			_execute(_path, arguments, null);
+		}
+
+        private void run(string arguments, Action<string> onLineReceived)
+		{
+			_execute(
+				_path,
+				arguments,
+				(error, x) => {
+						if (error) {
+							Logger.Write(
+								string.Format("Failed running {0} with {1}", _path, arguments));
+							Logger.Write(x);
+							return;
+						}
+						onLineReceived(x);
+					});
 		}
 	}
 
