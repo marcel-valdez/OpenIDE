@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using OpenIDE.CodeEngineIntegration;
+using OpenIDE.Core.CodeEngineIntegration;
 using OpenIDE.Core.Language;
 
 namespace OpenIDE.Arguments.Handlers
@@ -51,7 +51,7 @@ namespace OpenIDE.Arguments.Handlers
 			get { return  "Queries for signatures"; }
 		}
 		protected override string _queryDescription {
-			get { return  "Format: type=class,name=MyCls*. Supported properties: language, type, file, signature, name"; }
+			get { return  "Format: type=class,name=MyCls*. Supported properties: language, type, file, parent, name, signature, custom"; }
 		}
 		protected override string _command { get { return  "get-signatures"; } }
 

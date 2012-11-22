@@ -3,7 +3,7 @@ using System.Collections;
 using System.IO;
 using System.Collections.Generic;
 using OpenIDE.CodeEngine.Core.Caching;
-using OpenIDE.CodeEngine.Core.Logging;
+using OpenIDE.Core.Logging;
 using OpenIDE.CodeEngine.Core.Endpoints;
 using System.Linq;
 using OpenIDE.Core.Language;
@@ -142,8 +142,7 @@ namespace OpenIDE.CodeEngine.Core.ChangeTrackers
 			if (FilesToHandle.Count == 0)
 				return;
 			cacheHandler.SetLanguage(Plugin.GetLanguage());
-			foreach (var line in Plugin.Crawl(FilesToHandle))
-				cacheHandler.Handle(line);
+			Plugin.Crawl(FilesToHandle, (line) => cacheHandler.Handle(line));
 			FilesToHandle.Clear();
 		}
 	}

@@ -51,7 +51,7 @@ echo $BINARYDIR
 
 xbuild OpenIDE.sln /target:rebuild /property:OutDir=$BINARYDIR/ /p:Configuration=Release;
 xbuild OpenIDE.CodeEngine.sln /target:rebuild /property:OutDir=$BINARYDIR/ /p:Configuration=Release;
-xbuild Languages/CSharp/CSharp.sln /target:rebuild /property:OutDir=$BINARYDIR/ /p:Configuration=Release;
+#xbuild Languages/CSharp/CSharp.sln /target:rebuild /property:OutDir=$BINARYDIR/ /p:Configuration=Release;
 
 cp $BINARYDIR/CoreExtensions.dll $DEPLOYDIR/
 cp $BINARYDIR/oi.exe $DEPLOYDIR/
@@ -69,7 +69,11 @@ cp -r $ROOT/oi/script-templates/* $DEPLOYDIR/scripts/templates
 cp -r $ROOT/oi/rscript-templates/* $DEPLOYDIR/rscripts/templates
 
 cp $ROOT/Languages/CSharp/C# $DEPLOYDIR/Languages/C#
+cp $ROOT/Languages/CSharp/language.oicfgoptions $DEPLOYDIR/Languages/C#-plugin/language.oicfgoptions
 cp $BINARYDIR/C#.exe $DEPLOYDIR/Languages/C#-plugin/C#.exe
+cp $BINARYDIR/CoreExtensions.dll $DEPLOYDIR/Languages/C#-plugin/CoreExtensions.dll
+cp $BINARYDIR/OpenIDE.Core.dll $DEPLOYDIR/Languages/C#-plugin/OpenIDE.Core.dll
+cp $ROOT/lib/FSWatcher/FSWatcher.dll $DEPLOYDIR/CodeEngine/
 cp $BINARYDIR/ICSharpCode.NRefactory.CSharp.dll $DEPLOYDIR/Languages/C#-plugin/ICSharpCode.NRefactory.CSharp.dll
 cp $BINARYDIR/ICSharpCode.NRefactory.dll $DEPLOYDIR/Languages/C#-plugin/ICSharpCode.NRefactory.dll
 cp $BINARYDIR/Mono.Cecil.dll $DEPLOYDIR/Languages/C#-plugin/Mono.Cecil.dll

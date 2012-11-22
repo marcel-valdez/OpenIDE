@@ -35,9 +35,9 @@ mkdir %DEPLOYDIR%\scripts\templates
 mkdir %DEPLOYDIR%\rscripts
 mkdir %DEPLOYDIR%\rscripts\templates
 
-%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %SOURCEDIR%OpenIDE.sln  /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
-%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %SOURCEDIR%OpenIDE.CodeEngine.sln /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
-%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %SOURCEDIR%Languages\CSharp\CSharp.sln /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
+%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %ROOT%OpenIDE.sln  /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
+%SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %ROOT%OpenIDE.CodeEngine.sln /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
+REM %SystemRoot%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe %ROOT%Languages\CSharp\CSharp.sln /property:OutDir=%BINARYDIR%\;Configuration=Release /target:rebuild
 
 copy %BINARYDIR%\CoreExtensions.dll %DEPLOYDIR%\CoreExtensions.dll
 copy %BINARYDIR%\oi.exe %DEPLOYDIR%\oi.exe
@@ -55,7 +55,10 @@ xcopy /S /I /E %ROOT%\oi\script-templates %DEPLOYDIR%\scripts\templates
 xcopy /S /I /E %ROOT%\oi\rscript-templates %DEPLOYDIR%\rscripts\templates
 
 copy %ROOT%\Languages\CSharp\C#.bat %DEPLOYDIR%\Languages\C#.bat
+copy %ROOT%\Languages\CSharp\language.oicfgoptions %DEPLOYDIR%\Languages\C#-plugin\language.oicfgoptions
 copy %BINARYDIR%\C#.exe %DEPLOYDIR%\Languages\C#-plugin\C#.exe
+copy %BINARYDIR%\CoreExtensions.dll %DEPLOYDIR%\Languages\C#-plugin\CoreExtensions.dll
+copy %BINARYDIR%\OpenIDE.Core.dll %DEPLOYDIR%\Languages\C#-plugin\OpenIDE.Core.dll
 copy %BINARYDIR%\ICSharpCode.NRefactory.CSharp.dll %DEPLOYDIR%\Languages\C#-plugin\ICSharpCode.NRefactory.CSharp.dll
 copy %BINARYDIR%\ICSharpCode.NRefactory.dll %DEPLOYDIR%\Languages\C#-plugin\ICSharpCode.NRefactory.dll
 copy %BINARYDIR%\Mono.Cecil.dll %DEPLOYDIR%\Languages\C#-plugin\Mono.Cecil.dll
