@@ -5,37 +5,50 @@ using System.Reflection;
 using System.Collections.Generic;
 using OpenIDE.Core.Config;
 using OpenIDE.Core.Scripts;
+using OpenIDE.Core.Profiles;
 
 namespace OpenIDE.Core.FileSystem
 {
 	public class ReactiveScriptLocator : TemplateLocator 
 	{
-		public ReactiveScriptLocator()
-		{
+		public ReactiveScriptLocator(string keyPath, string currentPath) : base(keyPath, currentPath) {
 			_directory = "rscripts";
 		}
 	}
 	
 	public class ScriptLocator : TemplateLocator
 	{
-		public ScriptLocator()
-		{
+		public ScriptLocator(string keyPath, string currentPath) : base(keyPath, currentPath) {
 			_directory = "scripts";
+		}
+	}
+	
+	public class TestTemplateLocator : TemplateLocator
+	{
+		public TestTemplateLocator(string keyPath, string currentPath) : base(keyPath, currentPath) {
+			_directory = "test";
 		}
 	}
 
 	public class TemplateLocator 
 	{
 		protected string _directory;
+		protected string _keyPath;
+		protected string _currentPath;
+
+		public TemplateLocator(string keyPath, string currentPath) {
+			_keyPath = keyPath;
+			_currentPath = currentPath;
+		}
 
 		public IEnumerable<string> GetTemplates()
 		{
 			var dir =
 				Path.Combine(
-					GetGlobalPath(),
+					GetGlobalPath("default"),
 					"templates");
 			if (!Directory.Exists(dir))
-				return null;
+				return new string[] {};
 			return new ScriptFilter().GetScripts(dir);
 		}
 
@@ -50,49 +63,78 @@ namespace OpenIDE.Core.FileSystem
 
 		public Script[] GetGlobalScripts()
 		{
-			return getScripts(GetGlobalPath()).ToArray();
+			var defaultPath = getPath(GetGlobalPath("default"));
+			var profilePath = GetGlobalPath();
+			return getMergedScripts(defaultPath, profilePath);
 		}
 
 		public Script[] GetLocalScripts()
 		{
-			return getScripts(GetLocalPath()).ToArray();
+			var defaultPath = GetLocalPath("default");
+			if (defaultPath != null)
+				defaultPath = getPath(defaultPath);
+			var profilePath = GetLocalPath();
+			return getMergedScripts(defaultPath, profilePath);
 		}
 
 		public string GetGlobalPath()
 		{
-			return getPath(Path
-					.GetDirectoryName(
-						Assembly.GetExecutingAssembly().Location));
+			var locator = new ProfileLocator(_currentPath);
+			return GetGlobalPath(locator.GetActiveGlobalProfile());
+		}
+
+		public string GetGlobalPath(string profile)
+		{
+			var locator = new ProfileLocator(_currentPath);
+			return getPath(locator.GetGlobalProfilePath(profile));
 		}
 
 		public string GetLocalPath()
 		{
-			var configFile = Configuration.GetConfigFile(Environment.CurrentDirectory);
-			if (configFile == null)
+			var locator = new ProfileLocator(_currentPath);
+			return GetLocalPath(locator.GetActiveLocalProfile());
+		}
+
+		public string GetLocalPath(string profile)
+		{
+			var locator = new ProfileLocator(_currentPath);
+			var profilePath = locator.GetLocalProfilePath(profile);
+			if (profilePath == null)
 				return null;
-			return getPath(Path.GetDirectoryName(configFile));
+			return getPath(profilePath);
 		}
 
 		public string GetLanguagePath(string language)
 		{
 			return getPath(
 				Path.Combine(
-					Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), 
-					Path.Combine("Languages", language + "-plugin")));
+					GetGlobalPath("default"), 
+					Path.Combine("languages", language + "-files")));
 		}
 
 		private string getPath(string location)
 		{
+			location = Path.GetFullPath(location);
 			return Path.Combine(location, _directory);
+		}
+
+		private Script[] getMergedScripts(string defaultPath, string profilePath) {
+			var scripts = new List<Script>();
+			scripts.AddRange(getScripts(defaultPath));
+			if (profilePath != defaultPath)
+				scripts.AddRange(getScripts(profilePath));
+			return scripts.ToArray();
 		}
 
 		private IEnumerable<Script> getScripts(string path)
 		{
+			if (path == null)
+				return new Script[] {};
 			if (!Directory.Exists(path))
 				return new Script[] {};
-			var workingDir = Path.GetDirectoryName(Path.GetDirectoryName(path));
+			path = Path.GetFullPath(path);
 			return new ScriptFilter().GetScripts(path)
-				.Select(x => new Script(workingDir, x));
+				.Select(x => new Script(_keyPath, _currentPath, x));
 		}
 	}
 }

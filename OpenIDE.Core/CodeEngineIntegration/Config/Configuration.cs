@@ -1,11 +1,31 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Reflection;
+using System.Collections.Generic;
+using OpenIDE.Core.Profiles;
 using OpenIDE.Core.CommandBuilding;
 
 namespace OpenIDE.Core.Config
 {
+	public class ConfigurationSetting
+	{
+		public string Key { get; private set; }
+		public string Value { get; private set; }
+
+		public ConfigurationSetting(string key, string value) {
+			Key = key;
+			Value = value;
+		}
+
+		public string[] SplitBy(string delimiter) {
+			if (Value == null)
+				return new string[] {};
+			return Value.Split(new[] { delimiter }, StringSplitOptions.RemoveEmptyEntries);
+		}
+	}
+
 	public class Configuration
 	{
 		private const string DEFAULT_LANGUAGE_SETTING = "default.language";
@@ -13,11 +33,13 @@ namespace OpenIDE.Core.Config
 		private string[] _operators = new[] { "+=","-=","=" };
 		private string _path;
 		private bool _allowGlobal = false;
+		private List<string> _editorSettings = new List<string>();
 
 		public string ConfigurationFile { get; private set; }
 
 		public string DefaultLanguage { get; private set; }
 		public string[] EnabledLanguages { get; private set; }
+		public string[] EditorSettings { get { return _editorSettings.ToArray(); } }
 
 		public Configuration(string path, bool allowGlobal)
 		{
@@ -47,6 +69,41 @@ namespace OpenIDE.Core.Config
 		public static bool IsConfigured(string path)
 		{
 			return getConfigPoint(path) != null;
+		}
+		
+		public ConfigurationSetting[] GetSettingsStartingWith(string setting)
+		{
+			if (ConfigurationFile == null)
+				ConfigurationFile = GetConfigFile(_path);
+			if (ConfigurationFile == null)
+				return new ConfigurationSetting[] {};
+			var settings = new List<ConfigurationSetting>();
+			foreach (var rawLine in File.ReadAllLines(ConfigurationFile)) {
+				var line = rawLine.Trim(new[] { ' ', '\t' });
+				var key = getTag(line);
+				if (key.StartsWith(setting)) {
+					var value = getValue(line);
+					settings.Add(new ConfigurationSetting(key, value));
+				}
+			}
+			return settings.ToArray();
+		}
+
+		public ConfigurationSetting Get(string setting)
+		{
+			if (ConfigurationFile == null)
+				ConfigurationFile = GetConfigFile(_path);
+			if (ConfigurationFile == null)
+				return null;
+			ConfigurationSetting cfgSetting = null;
+			foreach (var rawLine in File.ReadAllLines(ConfigurationFile)) {
+				var line = rawLine.Trim(new[] { ' ', '\t' });
+				if (getTag(line) == setting) {
+					var value = getValue(line);
+					cfgSetting = new ConfigurationSetting(setting, value);
+				}
+			}
+			return cfgSetting;
 		}
 
 		public void Write(string setting)
@@ -178,13 +235,9 @@ namespace OpenIDE.Core.Config
 				lines.ToList()
 					.ForEach(x => 
 						{
-							if (getTag(x).Equals(setting))
-								written = true;
-							else
+							if (!getTag(x).Equals(setting))
 								writer.WriteLine(x);
 						});
-				if (!written)
-					writer.WriteLine(setting);
 			}
 		}
 
@@ -256,22 +309,15 @@ namespace OpenIDE.Core.Config
 						.Parse(line
 								.Substring(space, line.Length - space).Trim()).ToArray();
 			}
+			if (check.StartsWith("editor.")) {
+				_editorSettings.Add(check.Trim(new[] { ' ', '\t' }));
+			}
 		}
 
 		private static string getConfigPoint(string path)
 		{
-			if (path == null)
-				return null;
-			var dir = Path.Combine(path, ".OpenIDE");
-			if (!Directory.Exists(dir))
-			{
-				try {
-					return getConfigPoint(Path.GetDirectoryName(path));
-				} catch {
-					return null;
-				}
-			}
-			return dir;
+			var locator = new ProfileLocator(path);
+			return locator.GetLocalProfilePath(locator.GetActiveLocalProfile());
 		}
 	}
 }

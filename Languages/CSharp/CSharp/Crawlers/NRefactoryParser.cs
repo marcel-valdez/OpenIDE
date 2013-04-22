@@ -134,8 +134,8 @@ namespace CSharp.Crawlers
                             type.NameToken.StartLocation.Line,
                             type.NameToken.StartLocation.Column)
                             .SetEndPosition(
-                                type.EndLocation.Line,
-                                type.EndLocation.Column),
+                                type.RBraceToken.EndLocation.Line,
+                            type.RBraceToken.EndLocation.Column),
                         type);
             _writer.WriteEnum(enm);
             foreach (var member in type.Members) {
@@ -164,8 +164,8 @@ namespace CSharp.Crawlers
                         type.NameToken.StartLocation.Line,
                         type.NameToken.StartLocation.Column)
                         .SetEndPosition(
-                            type.EndLocation.Line,
-                            type.EndLocation.Column),
+                            type.RBraceToken.EndLocation.Line,
+                            type.RBraceToken.EndLocation.Column),
                     type));
         }
 
@@ -181,8 +181,8 @@ namespace CSharp.Crawlers
                         type.NameToken.StartLocation.Line,
                         type.NameToken.StartLocation.Column)
                         .SetEndPosition(
-                            type.EndLocation.Line,
-                            type.EndLocation.Column),
+                            type.RBraceToken.EndLocation.Line,
+                            type.RBraceToken.EndLocation.Column),
                     type));
         }
 
@@ -198,8 +198,8 @@ namespace CSharp.Crawlers
                         type.NameToken.StartLocation.Line,
                         type.NameToken.StartLocation.Column)
                         .SetEndPosition(
-                            type.EndLocation.Line,
-                            type.EndLocation.Column),
+                            type.RBraceToken.EndLocation.Line,
+                            type.RBraceToken.EndLocation.Column),
                     type));
         }
 
@@ -306,35 +306,52 @@ namespace CSharp.Crawlers
 
         private void handleMethod(MethodDeclaration method) {
             var memberNamespace = getMemberNamespace();
+
+            var sb = new StringBuilder();
+            sb.Append(memberNamespace + "." + method.Name + "(");
+            int i = 0;
+            foreach (var param in method.Parameters) {
+                if (i != 0)
+                    sb.Append(",");
+                sb.Append(signatureFrom(param.Type));
+                i++;
+            }
+            sb.Append(")");
+
             var parameters = new List<Parameter>();
             foreach (var param in method.Parameters) {
                 var signature = signatureFrom(param.Type);
-                parameters.Add(
+                var parameter =
                     new Parameter(
                         _file,
-                        memberNamespace + "." + method.Name,
+                        sb.ToString(),
                         param.Name,
                         "parameter",
                         param.NameToken.StartLocation.Line,
                         param.NameToken.StartLocation.Column,
-                        signature));
+                        signature);
+                parameter
+                    .SetEndPosition(
+                        param.EndLocation.Line,
+                        param.EndLocation.Column);
+                parameters.Add(parameter);
             }
-            _writer.WriteMethod(
-                addMemberInfo(
-                    new Method(
-                        _file,
-                        memberNamespace,
-                        method.Name,
-                        getTypeModifier(method.Modifiers),
-                        method.NameToken.StartLocation.Line,
-                        method.NameToken.StartLocation.Column,
-                        signatureFrom(method.ReturnType),
-                        parameters)
-                        .SetEndPosition(
-                            method.EndLocation.Line,
-                            method.EndLocation.Column),
-                    method));
-            _containingMethod = memberNamespace + "." + method.Name;
+
+            var cacheMethod = 
+                new Method(
+                    _file,
+                    memberNamespace,
+                    method.Name,
+                    getTypeModifier(method.Modifiers),
+                    method.NameToken.StartLocation.Line,
+                    method.NameToken.StartLocation.Column,
+                    signatureFrom(method.ReturnType),
+                    parameters)
+                    .SetEndPosition(
+                        method.EndLocation.Line,
+                        method.EndLocation.Column);
+            _writer.WriteMethod(addMemberInfo(cacheMethod, method));
+            _containingMethod = cacheMethod.ToNamespaceSignature();
 		}
 
         private string getMemberNamespace() {
@@ -374,7 +391,10 @@ namespace CSharp.Crawlers
                             getTypeModifier(field.Modifiers),
                             variable.NameToken.StartLocation.Line,
                             variable.NameToken.StartLocation.Column,
-                            returnType),
+                            returnType)
+                            .SetEndPosition(
+                                variable.EndLocation.Line,
+                                variable.EndLocation.Column),
                         field));
                 return;
             }
@@ -400,7 +420,10 @@ namespace CSharp.Crawlers
                     "local",
                     variable.NameToken.StartLocation.Line,
                     variable.NameToken.StartLocation.Column,
-                    type));
+                    type)
+                    .SetEndPosition(
+                        variable.EndLocation.Line,
+                        variable.EndLocation.Column));
 		}
 
         private T addMemberInfo<T>(CodeItemBase<T> type, EntityDeclaration decl)
@@ -411,7 +434,7 @@ namespace CSharp.Crawlers
 
         private string signatureFrom(object expr) {
             if (isOfType<PrimitiveExpression>(expr))
-                return ((PrimitiveExpression)expr).Value.ToString();
+                return ((PrimitiveExpression)expr).Value.GetType().ToString();
             if (isOfType<VariableInitializer>(expr))
                 return signatureFrom(((VariableInitializer)expr).Initializer);
             if (isOfType<InvocationExpression>(expr))

@@ -6,11 +6,13 @@ namespace CSharp.Crawlers
 {
 	public class Namespce : ICodeReference
 	{
+        public long ID { get; private set; }
+
         public bool AllTypesAreResolved { get; set; }
 
 		public string Type { get; private set; }
         public FileRef File { get; private set; }
-        public string Namespace { get { return ""; } }
+        public string Parent { get { return ""; } }
 		public string Signature { get { return Name; } }
 		public string Name { get; private set; }
         public string Scope { get; private set; }
@@ -30,13 +32,21 @@ namespace CSharp.Crawlers
             JSON = "";
 		}
 
+        public void SetID(long id) {
+            ID = id;
+        }
+
         public Namespce SetEndPosition(int line, int column) {
             EndLine = line;
             EndColumn = column;
             return this;
         }
 
-        public string GenerateFullSignature() {
+        public string ToFullSignature() {
+            return Signature;
+        }
+
+        public string ToNamespaceSignature() {
             return Signature;
         }
 

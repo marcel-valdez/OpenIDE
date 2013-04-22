@@ -32,6 +32,9 @@ namespace OpenIDE.CodeEngine.Core.Endpoints
 			_keyPath = editorKey;
 			_cache = cache;
 			_eventEndpoint = eventEndpoint;
+			_eventEndpoint.DispatchThrough((m) => {
+					handle(new MessageArgs(Guid.Empty, m));
+				});
 			_server = new TcpServer();
 			_server.IncomingMessage += Handle_serverIncomingMessage;
 			_server.Start();
@@ -82,10 +85,12 @@ namespace OpenIDE.CodeEngine.Core.Endpoints
 		{
 			_server.Start();
 			writeInstanceInfo(_keyPath);
+			_eventEndpoint.Send("codeengine started");
 		}
 		
 		public void Stop()
 		{
+			_eventEndpoint.Send("codeengine stopped");
 			if (File.Exists(_instanceFile))
 				File.Delete(_instanceFile);
 		}

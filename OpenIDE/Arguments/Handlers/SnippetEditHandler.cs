@@ -17,12 +17,12 @@ namespace OpenIDE.Arguments.Handlers
 						"Opens a snippet for edit");
 					usage.Add("LANGUAGE", "Language snippet belongs to (name or file extension)")
 						.Add("SNIPPET_NAME",
-							"Name coresponding to the snippet name in Languages/[LANGUAGE]/snippets");
+							"Name coresponding to the snippet name in languages/[LANGUAGE]/snippets");
 					return usage;
 			}
 		}
 	
-		public string Command { get { return "snippet-edit"; } }
+		public string Command { get { return "edit"; } }
 		
 		public SnippetEditHandler(ICodeEngineLocator codeEngineFactory)
 		{

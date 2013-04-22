@@ -5,13 +5,18 @@ using System.Text;
 using System.Diagnostics;
 using System.Collections.Generic;
 using OpenIDE.Core.Language;
+using OpenIDE.Core.Profiles;
+using CoreExtensions;
 
 namespace OpenIDE.Core.FileSystem
 {
 	public class Script
 	{
 		private string _file;
+		private string _token;
 		private string _workingDirectory;
+		private string _localProfileName;
+		private string _globalProfileName;
 
 		public IEnumerable<BaseCommandHandlerParameter> Usages { get { return getUsages(); } }
 
@@ -19,17 +24,28 @@ namespace OpenIDE.Core.FileSystem
 		public string Name { get; private set; }
 		public string Description { get; private set; }
 
-		public Script(string workingDirectory, string file)
+		public Script(string token, string workingDirectory, string file)
 		{
 			_file = file;
+			_token = token;
 			Name = Path.GetFileNameWithoutExtension(file);
 			Description = "";
 			_workingDirectory = workingDirectory;
+			var profiles = new ProfileLocator(_token);
+			_globalProfileName = profiles.GetActiveGlobalProfile();
+			_localProfileName = profiles.GetActiveLocalProfile();
 		}
 
-		public IEnumerable<string> Run(string arguments)
+		public void Run(string arguments, Action<string> onLine)
 		{
-			return run(arguments);
+			arguments = "{global-profile} {local-profile} " + arguments;
+			run(
+				arguments,
+				onLine,
+				new[] {
+						new KeyValuePair<string,string>("{global-profile}", "\"" + _globalProfileName + "\""),
+						new KeyValuePair<string,string>("{local-profile}", "\"" + _localProfileName + "\"")
+					});
 		}
 
 		private IEnumerable<BaseCommandHandlerParameter> getUsages()
@@ -76,47 +92,32 @@ namespace OpenIDE.Core.FileSystem
 		private string ToSingleLine(string arguments)
 		{
 			var sb = new StringBuilder();
-			run(arguments).ToList()
-				.ForEach(x => 
-					{
-						sb.Append(x);
-					});
+			run(arguments, (line) => sb.Append(line), new KeyValuePair<string,string>[] {});
 			return sb.ToString();
 		}
 
-		private IEnumerable<string> run(string arguments)
+		private void run(string arguments, Action<string> onLine,
+						 IEnumerable<KeyValuePair<string,string>> replacements)
 		{
 			var cmd = _file;
+			var finalReplacements = new List<KeyValuePair<string,string>>();
+			finalReplacements.Add(new KeyValuePair<string,string>("{run-location}", "\"" + _workingDirectory + "\""));
+			finalReplacements.AddRange(replacements);
+            arguments = "{run-location} " + arguments;
 			var proc = new Process();
-			var startedSuccessfully = true;
-			try {
-				arguments = "\"" + Environment.CurrentDirectory + "\" " + arguments;
-				if (Environment.OSVersion.Platform != PlatformID.Unix &&
-					Environment.OSVersion.Platform != PlatformID.MacOSX)
-				{
-					arguments = "/c \"" + ("\"" + cmd + "\" " + arguments).Replace ("\"", "^\"") + "\"";
-					cmd = "cmd.exe";
-				}
-				proc.StartInfo = new ProcessStartInfo(cmd, arguments);
-				proc.StartInfo.CreateNoWindow = true;
-				proc.StartInfo.UseShellExecute = false;
-				proc.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-				proc.StartInfo.RedirectStandardOutput = true;
-				proc.StartInfo.WorkingDirectory = _workingDirectory;
-				proc.Start();
-			} catch {
-				startedSuccessfully = false;
-			}
-			if (startedSuccessfully)
-			{
-				while (true)
-				{
-					var line = proc.StandardOutput.ReadLine();
-					if (line == null)
-						break;
-					yield return line;
-				}
-			}
+			proc
+				.Query(
+					cmd,
+					arguments,
+					false,
+					_token,
+					(error, line) => {
+							if (error && !line.StartsWith("error|"))
+								onLine("error|" + error);
+							else
+								onLine(line);
+						},
+					finalReplacements);
 		}
 	}
 }

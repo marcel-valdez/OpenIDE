@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Collections.Generic;
 using OpenIDE.Core.Config;
 using OpenIDE.Core.Language;
+using OpenIDE.Core.Profiles;
 
 namespace OpenIDE.Arguments.Handlers
 {
@@ -25,7 +26,9 @@ namespace OpenIDE.Arguments.Handlers
 				read.Add("cfgfile", "Location of nearest configuration file");
 				read.Add("cfgpoint", "Location of nearest configuration point");
 				read.Add("rootpoint", "Location of current root location");
-				read.Add("SETTING_NAME", "The name of the setting to print the value of. If name ends with * it will print all matching settings");
+				read.Add("SETTING_NAME", "Setting to print the value of. Supports wildcard (global fallback)");
+				read.Add("[--global]", "Forces configuration command to be directed towards global config");
+				read.Add("[-g]", "Short version of --global");
 				var setting = usage.Add("SETTING", "The statement to write to the config");
 				setting.Add("[--global]", "Forces configuration command to be directed towards global config");
 				setting.Add("[-g]", "Short version of --global");
@@ -35,7 +38,7 @@ namespace OpenIDE.Arguments.Handlers
 			}
 		}
 
-		public string Command { get { return "configure"; } }
+		public string Command { get { return "conf"; } }
 
 		public ConfigurationHandler(PluginLocator locator) {
 			_pluginLocator = locator;
@@ -44,10 +47,8 @@ namespace OpenIDE.Arguments.Handlers
 		public void Execute(string[] arguments)
 		{
 			if (arguments.Length < 1)
-			{
-				Console.WriteLine("Invalid number of arguments. Usage " + Command + " SETTING");
-				return;
-			}
+				arguments = new[] { "read" }; 
+			
 			var path = Environment.CurrentDirectory;
 
 			if (arguments[0] == "init")
@@ -89,15 +90,10 @@ namespace OpenIDE.Arguments.Handlers
 			}
 
 			var config = new Configuration(path, false);
-			/*Console.WriteLine("Writing to " + config.ConfigurationFile);
-			Console.WriteLine("\t{0} setting: {1}",
-				args.Delete ? "Deleting" : "Updating",
-				args.Setting);*/
-
 			if (args.Delete)
-				config.Delete(args.Setting);
+				config.Delete(args.Settings[0]);
 			else
-				config.Write(args.Setting);
+				config.Write(args.Settings[0]);
 		}
 
 		private void initializingConfiguration(string path)
@@ -118,13 +114,19 @@ namespace OpenIDE.Arguments.Handlers
 
 		private void printClosestConfiguration(string path, string[] arguments)
 		{
+			var args = parseArguments(arguments);
+			if (args == null)
+				return;
+			if (args.Global)
+				path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+
 			var file = new Configuration(path, true).ConfigurationFile;
 			if (!File.Exists(file))
 				return;
 			string pattern =  null;
 			var wildcard = false;
-			if (arguments.Length == 2)
-				pattern = arguments[1];
+			if (args.Settings.Length == 2)
+				pattern = args.Settings[1];
 			if (pattern == null) {
 				Console.WriteLine("Configuration file: {0}", file);
 				Console.WriteLine("");
@@ -139,7 +141,7 @@ namespace OpenIDE.Arguments.Handlers
 				return;
 			}
 			if (pattern == "rootpoint") {
-				Console.Write(Path.GetDirectoryName(Path.GetDirectoryName(file)));
+				Console.Write(Path.GetDirectoryName(new ProfileLocator(path).GetLocalProfilesRoot()));
 				return;
 			}
 			if (pattern == "cfgfile") {
@@ -151,37 +153,59 @@ namespace OpenIDE.Arguments.Handlers
 				pattern = pattern.Substring(0, pattern.Length - 1);
 			}
 			if (wildcard) {
-				File.ReadAllLines(file).ToList()
-					.ForEach(x => {
-						var s = x.Replace(" ", "").Replace("\t", "");
-						if (x.StartsWith(pattern)) {
-							Console.WriteLine(x.Trim(new[] { ' ', '\t' }));
-						}
-					});
+				getSettingsStartingWithWildcard(File.ReadAllLines(file), pattern)
+					.ForEach(x => Console.WriteLine(x));
 			} else {
-				File.ReadAllLines(file).ToList()
-					.ForEach(x => {
-						var s = x.Replace(" ", "").Replace("\t", "");
-						if (x.StartsWith(pattern + "=")) {
-							var equals = x.IndexOf("=") + 1;
-							Console.Write(x.Substring(equals, x.Length - equals));
-							return;
-						}
-					});
+				var value = getSetting(File.ReadAllLines(file), pattern);
+				if (value == null) {
+					var global = 
+						new Configuration(
+							Path.GetDirectoryName(
+								Assembly.GetExecutingAssembly().Location),
+							false)
+						.ConfigurationFile;
+					if (File.Exists(global)) {
+						value = getSetting(File.ReadAllLines(global), pattern);
+					}
+				}
+				Console.Write(value);
 			}
+		}
+
+		private List<string> getSettingsStartingWithWildcard(IEnumerable<string> lines, string pattern) {
+			return lines.ToList()
+				.Where(x => {
+						var s = x.Replace(" ", "").Replace("\t", "");
+						return x.StartsWith(pattern);
+					})
+				.Select(x => x.Trim(new[] { ' ', '\t' }))
+				.ToList();
+		}
+
+		private string getSetting(IEnumerable<string> lines, string pattern) {
+			var item = lines.ToList()
+				.FirstOrDefault(x => {
+						var s = x.Replace(" ", "").Replace("\t", "");
+						return x.StartsWith(pattern + "=");
+					});
+			if (item == null)
+				return null;
+
+			var equals = item.IndexOf("=") + 1;
+			return item.Substring(equals, item.Length - equals);
 		}
 		
 		private CommandArguments parseArguments(string[] arguments)
 		{
-			var setting = arguments.FirstOrDefault(x => !x.StartsWith("-"));
-			if (setting == null)
+			var settings = arguments.Where(x => !x.StartsWith("-")).ToArray();
+			if (settings.Length == 0)
 			{
-				Console.WriteLine("error|No setting argument provided");
+				Console.WriteLine("error|No argument provided");
 				return null;
 			}
 			return new CommandArguments()
 				{
-					Setting = setting,
+					Settings = settings,
 					Global = arguments.Contains("--global") || arguments.Contains("-g"),
 					Delete = arguments.Contains("--delete") || arguments.Contains("-d")
 				};
@@ -189,7 +213,7 @@ namespace OpenIDE.Arguments.Handlers
 
 		class CommandArguments
 		{
-			public string Setting { get; set; }
+			public string[] Settings { get; set; }
 			public bool Global { get; set; }
 			public bool Delete { get; set; }
 		}

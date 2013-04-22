@@ -4,24 +4,41 @@ using System.Linq;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using CoreExtensions;
 using OpenIDE.Core.Logging;
+using OpenIDE.Core.Profiles;
 
 namespace OpenIDE.Core.RScripts
 {
 	public class ReactiveScript
 	{
+		private string _name;
 		private string _file;
 		private string _keyPath;
-		private List<string> _events = new List<string>();	
+		private List<string> _events = new List<string>();
+		private string _localProfileName;
+		private string _globalProfileName;
+		private Action<string> _dispatch;
 
-		public string Name { get { return Path.GetFileNameWithoutExtension(_file); } }
+		public string Name {
+			get {
+				if (_name == null)
+					_name = Path.GetFileNameWithoutExtension(_file);
+				return _name;
+			}
+		}
+
 		public string File { get { return _file; } }
 
-		public ReactiveScript(string file, string keyPath)
+		public ReactiveScript(string file, string keyPath, Action<string> dispatch)
 		{
 			_file = file;
 			_keyPath = keyPath;
+			_dispatch = dispatch;
+			var profiles = new ProfileLocator(_keyPath);
+			_globalProfileName = profiles.GetActiveGlobalProfile();
+			_localProfileName = profiles.GetActiveLocalProfile();
 			getEvents();
 		}
 
@@ -47,10 +64,43 @@ namespace OpenIDE.Core.RScripts
 							.Replace("<", "^<")
 							.Replace(">", "^>");
 			}
-            message = "\"" + message + "\"";
+            message = "{event} {global-profile} {local-profile}";
 			var process = new Process();
             Logger.Write("Running: " + _file + " " + message);
-			process.Run(_file, message, false, _keyPath);
+            ThreadPool.QueueUserWorkItem((task) => {
+	            try
+	            {
+	            	var msg = task.ToString();
+	            	process.Query(
+	            		_file,
+	            		msg,
+	            		false,
+	            		_keyPath,
+	            		(error, m) => {
+	            			if (m == null)
+	            				return;
+	            			var cmdText = "command|";
+	            			if (error) {
+	            				Logger.Write("rscript-" + Name + " produced an error:");
+	            				Logger.Write("rscript-" + Name + "-" + m);
+	            			} else {
+	            				if (m.StartsWith(cmdText))
+	            					_dispatch(m.Substring(cmdText.Length, m.Length - cmdText.Length));
+	            				else
+	            					_dispatch("rscript-" + Name + " " + m);
+	            			}
+	            		},
+	            		new[] {
+							new KeyValuePair<string,string>("{event}", "\"" + message + "\""),
+							new KeyValuePair<string,string>("{global-profile}", "\"" + _globalProfileName + "\""),
+							new KeyValuePair<string,string>("{local-profile}", "\"" + _localProfileName + "\"")
+						});
+	            }
+				catch (Exception ex)
+				{
+					Logger.Write(ex.ToString());
+				}
+			}, message);
 		}
 
 		private void getEvents()
@@ -70,8 +120,11 @@ namespace OpenIDE.Core.RScripts
 							Logger.Write(m);
 							return;
 						}
-						if (m.Length > 0)
-							_events.Add(m.Trim(new[] {'\"'}));
+						if (m.Length > 0) {
+							var expression = m.Trim(new[] {'\"'});
+							_events.Add(expression);
+							Logger.Write(_file + " reacts to: " + expression);
+						}
 					});
 		}
 		
